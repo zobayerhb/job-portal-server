@@ -1,4 +1,4 @@
-require('dotenv').config()
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const port = process.env.PORT || 5000;
@@ -22,6 +22,14 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     await client.connect();
+
+    const jobsCollection = client.db("jobPortalDB").collection("jobs");
+
+    app.get("/jobs", async (req, res) => {
+      const cursor = jobsCollection.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
