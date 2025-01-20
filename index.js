@@ -1,8 +1,8 @@
 require("dotenv").config();
 const express = require("express");
+const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
-const cors = require("cors");
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
@@ -17,17 +17,17 @@ app.use(express.json());
 app.use(cookieParser());
 
 const verifyToken = (req, res, next) => {
-  // console.log("Verify Token Id: ", req.cookies.token);
   const token = req.cookies?.token;
   if (!token) {
     return res.status(401).send({ message: "unauthorized access" });
   }
 
   // verify token
-  jwt.verify(token, process.env.JWT_SECRET, (err, decode) => {
+  jwt.verify(token, process.env.JWT_ACCESS_SECRET, (err, decoded) => {
     if (err) {
       return res.status(401).send({ message: "unauthorized access" });
     }
+    req.user = decoded;
     next();
   });
 };
@@ -51,21 +51,6 @@ async function run() {
     const jobsApplication = client
       .db("jobPortalDB")
       .collection("jobs-application");
-
-    // auth related api
-    app.post("/jwt", async (req, res) => {
-      const user = req.body;
-      const token = jwt.sign({ user }, process.env.JWT_SECRET, {
-        expiresIn: "1h",
-      });
-      res
-        .cookie("token", token, {
-          httpOnly: true,
-          secure: false,
-          sameSite: "strict",
-        })
-        .send({ status: true });
-    });
 
     // jobs related Apis
     app.get("/jobs", async (req, res) => {
@@ -99,12 +84,40 @@ async function run() {
       res.send(result);
     });
 
+    // jwt auth related api
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.JWT_ACCESS_SECRET, {
+        expiresIn: "10h",
+      });
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: false,
+        })
+        .send({ success: true });
+    });
+    app.post("/logout", (req, res) => {
+      res
+        .clearCookie("token", {
+          httpOnly: true,
+          secure: false,
+        })
+        .send({ success: true });
+    });
+
     // job applications apis
     // get all data , get one, get more (0,1, many)
-
     app.get("/job-application", verifyToken, async (req, res) => {
       const email = req.query.email;
       const query = { applicant_email: email };
+
+      // console.log(req.cookies?.token);
+      // req token !== query token
+      if (req.user.email !== req.query.email) {
+        return res.status(403).send({ message: "Forbidden" });
+      }
+
       const result = await jobsApplication.find(query).toArray();
       // fokira way to aggregate data
       for (const application of result) {
