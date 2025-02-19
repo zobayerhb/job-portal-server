@@ -9,7 +9,11 @@ const app = express();
 
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: [
+      "http://localhost:5173",
+      "https://job-portal-55a2a.web.app",
+      "https://job-portal-55a2a.firebaseapp.com",
+    ],
     credentials: true,
   })
 );
@@ -32,7 +36,8 @@ const verifyToken = (req, res, next) => {
   });
 };
 
-const uri = `mongodb+srv://${process.env.DB_user}:${process.env.DB_pass}@cluster0.vpupb.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+// const uri = `mongodb+srv://${process.env.DB_user}:${process.env.DB_pass}@cluster0.vpupb.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+var uri = `mongodb://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0-shard-00-00.vpupb.mongodb.net:27017,cluster0-shard-00-01.vpupb.mongodb.net:27017,cluster0-shard-00-02.vpupb.mongodb.net:27017/?ssl=true&replicaSet=atlas-i6hsd2-shard-0&authSource=admin&retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -45,7 +50,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const jobsCollection = client.db("jobPortalDB").collection("jobs");
     const jobsApplication = client
@@ -55,11 +60,31 @@ async function run() {
     // jobs related Apis
     app.get("/jobs", async (req, res) => {
       const email = req.query.email;
+      const sort = req.query?.sort;
+      const search = req.query?.search;
+      const min = req.query?.min;
+      const max = req.query?.max;
+
+      let sortQuery = {};
       let query = {};
+
       if (email) {
         query = { hr_email: email };
       }
-      const cursor = jobsCollection.find(query);
+      if (sort == "true") {
+        sortQuery = { "salaryRange.min": -1 };
+      }
+      if (search) {
+        query.location = { $regex: search, $options: "i" };
+      }
+      if (min && max) {
+        query = {
+          ...query,
+          "salaryRange.min": { $gte: parseInt(min) },
+          "salaryRange.max": { $lte: parseInt(max) },
+        };
+      }
+      const cursor = jobsCollection.find(query).sort(sortQuery);
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -93,7 +118,8 @@ async function run() {
       res
         .cookie("token", token, {
           httpOnly: true,
-          secure: false,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
         })
         .send({ success: true });
     });
@@ -101,7 +127,8 @@ async function run() {
       res
         .clearCookie("token", {
           httpOnly: true,
-          secure: false,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
         })
         .send({ success: true });
     });
@@ -160,10 +187,10 @@ async function run() {
       res.send(result);
     });
 
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
@@ -176,5 +203,5 @@ app.get("/", (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Job portal server running on port ${port}`);
+  // console.log(`Job portal server running on port ${port}`);
 });
